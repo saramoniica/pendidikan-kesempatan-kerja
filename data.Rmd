@@ -1,0 +1,871 @@
+---
+title: "data"
+output: html_document
+date: '2022-05-14'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(scales)
+library(glue)
+library(plotly)
+library(ggplot2)
+library(stringr)
+library(lubridate )
+library(dplyr)
+library(zoo)
+library(hrbrthemes)
+library(viridis)
+library(leaflet)
+library(rgdal)
+library(GADMTools)
+library(sf)
+```
+
+```{r}
+b <- read.csv("data/bt.csv")
+hls <- read_csv("data/hls.csv")
+p <- read_csv("data/p.csv")
+rls <- read_csv("data/rls.csv")
+spp <- read_csv("data/spp.csv")
+jenjang <- read_csv("data/jj.csv")
+penyelesaian_daerah <- read_csv("data/penyelesaian-daerah.csv")
+penyelesaian_kelamin <- read_csv("data/penyelesaian-kelamin.csv")
+pt_kelamin <- read_csv("data/PT-kelamin.csv")
+pt_pend <- read_csv("data/PT-pend.csv")
+pt_bulan <- read_csv("data/PT-bln.csv")
+pt_lulus <- read_csv("data/PT-lulus.csv")
+```
+
+```{r}
+p
+str(hls)
+head(p)
+head(rls)
+head(spp)
+```
+
+```{r}
+b <- b %>% mutate(nama_variabel = as.factor(nama_variabel),
+         jenis_kelamin = as.factor(jenis_kelamin),
+         provinsi = as.factor(provinsi) ,
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+hls <- hls %>% mutate(nama_variabel = as.factor(nama_variabel),
+                    jenis_kelamin = as.factor(jenis_kelamin),
+                    provinsi = as.factor(provinsi) ,
+                    angka  = as.numeric(angka),
+                    tahun = as.factor(tahun))
+p <- p %>% mutate(nama_variabel = as.factor(nama_variabel),
+         jenis_kelamin = as.factor(jenis_kelamin),
+         provinsi = as.factor(provinsi) ,
+         total  = as.numeric(total),
+         tahun = as.factor(tahun))
+rls <- rls %>%mutate(nama_variabel = as.factor(nama_variabel),
+         jenis_kelamin = as.factor(jenis_kelamin),
+         provinsi = as.factor(provinsi) ,
+         angka  = as.numeric(angka),
+         tahun = as.factor(tahun))
+spp <- spp %>% mutate(nama_variabel = as.factor(nama_variabel),
+         provinsi = as.factor(provinsi) ,
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+```
+
+```{r}
+str(p)
+str(b)
+str(hls)
+str(rls)
+str(spp)
+```
+
+```{r}
+rls <- distinct(rls, nama_variabel,jenis_kelamin,tahun,angka,provinsi, .keep_all= TRUE)
+rls
+```
+
+```{r}
+hls_rls <- bind_rows(hls, rls)
+hls_rls
+```
+
+```{r}
+levels(hls$jenis_kelamin)
+```
+
+
+```{r}
+rls_clean <- rls[rls$jenis_kelamin != "Laki-laki", ]
+hls_clean <- hls[hls$jenis_kelamin != "Laki-laki", ]
+```
+
+```{r}
+hls_rls_clean <- bind_rows(hls_clean, rls_clean)
+hls_rls_clean <- hls_rls_clean %>% mutate(label=glue("Lama : {angka}"))
+hls_rls_clean
+```
+
+
+```{r}
+plot1 <- ggplot(hls_rls_clean, fill = nama_variabel) + 
+  geom_point(aes(x = tahun, y = angka, fill = factor(nama_variabel, levels=c("Rata-rata Lama Sekolah","Angka Harapan Lama Sekolah")),text = label),
+           stat = "identity", position = "dodge", show.legend = F) +
+  scale_fill_viridis(discrete = T, option = "C") +
+  scale_y_continuous("Count", breaks = seq(5,35,5), limits=c(0,20),
+                     expand = expansion(mult = c(0.001, 0.001)),
+                     sec.axis = dup_axis(name = NULL, labels = NULL)) +
+  scale_x_discrete(expand = expansion(mult = c(0.0001, 0.0001)))+
+  labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+  theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none")
+plot1
+```
+
+
+ output$plothlsrls <- renderPlotly({
+      hls_rls_clean <- hls_rls_clean  %>%  filter(tahun == input$input_tahun) %>% 
+        mutate(label =glue("Lama(Tahun) : {angka}"))
+    
+      plothlsrls <- ggplot(hls_rls_clean) + 
+        geom_bar(data =hls_rls_clean[hls_rls_clean$nama_variabel == "Angka Harapan Lama Sekolah",], aes(x = provinsi, y = angka, fill=provinsi, text = label), 
+                 stat = "identity", position = "dodge", show.legend = F) +
+        geom_line(data= hls_rls_clean[hls_rls_clean$nama_variabel == "Rata-rata Lama Sekolah",],aes(x = provinsi, y = angka ,group = 1)) +
+        geom_point(data= hls_rls_clean[hls_rls_clean$nama_variabel == "Rata-rata Lama Sekolah",],aes(x = provinsi, y= angka)) +
+        scale_fill_viridis(discrete = T, option = "C") +
+        scale_y_continuous(breaks = seq(5,35,5), limits=c(0,20),
+                           expand = expansion(mult = c(0.001, 0.001)),
+                           sec.axis = dup_axis(name = NULL, labels = NULL)) +
+        scale_x_discrete(expand = expansion(mult = c(0.0001, 0.0001)))+
+        labs(title = NULL,
+             x = NULL,
+             y = NULL,
+             fill = NULL) +
+        theme(legend.title = element_blank(),
+              axis.text.x = element_text(angle = 30, hjust = 1),
+              plot.title = element_text(face = "bold"),
+              panel.background = element_rect(fill = "#ffffff"),
+              axis.line.y = element_line(colour = "grey"),
+              axis.line.x = element_blank(),
+              panel.grid = element_blank()) +
+        theme(axis.text.x = element_text(angle = 45, hjust=1))
+    
+    ggplotly(plothlsrls, tooltip="text")
+
+
++
+  geom_line(data= hls_rls_clean[hls_rls_clean$nama_variabel == "Rata-rata Lama Sekolah",],aes(x = tahun, y = angka ,group = 1, text = label)) +
+  geom_point(data= hls_rls_clean[hls_rls_clean$nama_variabel == "Rata-rata Lama Sekolah",],aes(x = tahun, y= angka)) +
+
+```{r}
+ggplotly(plot1, tooltip="text")
+```
+
+```{r}
+plothlsrls <- ggplot(hls_rls_clean, aes(x = tahun, y = angka, group=nama_variabel, color=nama_variabel, text = label)) + 
+      geom_line() +
+      scale_fill_viridis(discrete = T, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "top")
+    
+ggplotly(plothlsrls, tooltip="text")
+```
+
+plothlsrls <- ggplot(hls_rls_clean) + 
+      geom_line(aes(x = tahun, y = angka, fill=nama_variabel, text = label), 
+               stat = "identity", position = "dodge", show.legend = F) +
+      facet_wrap(~jenis_kelamin) +
+      scale_fill_viridis(discrete = T, option = "C") +
+      scale_y_continuous(breaks = seq(5,35,5), limits=c(0,20),
+                         expand = expansion(mult = c(0.001, 0.001)),
+                         sec.axis = dup_axis(name = NULL, labels = NULL)) +
+      scale_x_discrete(expand = expansion(mult = c(0.0001, 0.0001)))+
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "top")
+    
+    ggplotly(plothlsrls, tooltip="text")
+
+
+output$plothlsrls <- renderPlotly({
+    hls_rls_clean <- hls_rls_clean %>% mutate(label =glue(" Kategori : {nama_variabel} 
+                                                      Lama(Tahun) : {angka}")) %>%  filter(provinsi == input$input_provinsi) 
+    
+    plothlsrls <- ggplot(hls_rls_clean) + 
+      geom_bar(aes(x = tahun, y = angka, fill=nama_variabel, text = label), 
+                stat = "identity", position = "dodge", show.legend = F) +
+      scale_fill_viridis(discrete = T, option = "C") +
+      scale_y_continuous(breaks = seq(5,35,5), limits=c(0,20),
+                         expand = expansion(mult = c(0.001, 0.001)),
+                         sec.axis = dup_axis(name = NULL, labels = NULL)) +
+      scale_x_discrete(expand = expansion(mult = c(0.0001, 0.0001)))+
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "top")
+    
+    ggplotly(plothlsrls, tooltip="text")
+
+
+```{r}
+head(penyelesaian_daerah)
+head(penyelesaian_kelamin)
+head(b)
+```
+
+```{r}
+penyelesaian_kelamin <- penyelesaian_kelamin %>%mutate(tingkat_pendidikan = as.factor(tingkat_pendidikan),
+         jenis_kelamin = as.factor(jenis_kelamin),
+         nama_variabel = as.factor(nama_variabel) ,
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+penyelesaian_daerah <- penyelesaian_daerah %>%mutate(tingkat_pendidikan = as.factor(tingkat_pendidikan),
+         provonsi = as.factor(provonsi),
+         nama_variabel = as.factor(nama_variabel) ,
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+```
+
+
+```{r}
+
+pdk <- bind_rows(penyelesaian_daerah, penyelesaian_kelamin)
+pdk <- pdk %>% rename(provinsi = provonsi)
+pdk
+```
+
+
+```{r}
+pdk <- pivot_longer(data = pdk,
+                           cols = c("tingkat_pendidikan","jenis_kelamin"),
+                           names_to = "variabel")
+pdk
+```
+
+```{r}
+pdk <- pdk %>%
+  rename(jenis = value)
+```
+
+```{r}
+pdk <- pdk %>% na.omit()
+pdk <- pdk %>%  mutate(label =glue("Variabel :{variabel}
+                                   Sub Variabel : {jenis}
+                                    Total % : {persen}"))
+```
+
+```{r}
+pdk <- pdk  %>% select (-c("variabel", "nama_variabel"))
+pdk 
+``` 
+
+
+```{r}
+plotpdk <- pdk %>% ggplot(aes(x= provinsi, y= persen, fill = jenis)) +
+      geom_line(aes(group=1),position = "identity", colour="black", size=0.2, alpha=.6) +
+      geom_point(aes(text = label)) +
+      scale_fill_viridis(discrete = TRUE, option = "C") +
+      theme(legend.position="top")
+plotpdk
+```
+
+```{r}
+ggplotly(plotpdk, tooltip = "text")
+```
+
+
+```{r}
+  ggplot(pdk, aes(x=provinsi, y= persen, fill=jenis)) +
+    geom_area(position = "identity", colour="black", size=0.2, alpha=.4) +
+    geom_point(aes(text=label)) +
+    scale_fill_viridis(discrete = TRUE, option = "C") +
+    ggtitle("Korban menurut Jenis Kelamin Per Bulan") +
+    theme_minimal() +
+    theme(legend.position="top")
+```
+
+
+```{r}
+penyelesaian_daerah <- penyelesaian_daerah  %>% 
+  mutate(label =glue(" Tingkat Pendidikan : {tingkat_pendidikan}
+                       Total % : {persen}"))
+```
+
+
+
+```{r}
+plotpd <- penyelesaian_daerah %>% ggplot(aes(x=tahun, y= persen, fill = tingkat_pendidikan)) +
+    geom_area(position = "identity", colour="black", size=0.2, alpha=.4) +
+    geom_point(aes(text = label)) +
+    scale_fill_viridis(discrete = TRUE, option = "C") +
+    ggtitle("Tingkat Penyelesaian di Masing-Masing Provinsi") +
+    theme_minimal() +
+    theme(legend.position="top")
+plotpd
+```
+
+```{r}
+pdk %>%
+  filter(jenis %in% c("SD / Sederajat", "SMP / Sederajat", "SMA / Sederajat")) %>%
+  ggplot(aes(x= provinsi, y=persen, color=jenis, fill=jenis)) +
+    geom_density(alpha=0.6) +
+    scale_fill_viridis(discrete=TRUE) +
+    scale_color_viridis(discrete=TRUE) +
+    theme_ipsum() +
+    theme(
+      legend.position="none"
+    ) +
+    ylab("") +
+    xlab("Assigned Probability (%)")
+```
+
+```{r}
+b
+head(pt_kelamin)
+head(pt_pend)
+pt_bulan
+pt_lulus
+```
+
+```{r}
+pt_kelamin <- pt_kelamin %>% select(-c("nama_variabel")) %>% mutate(
+         jenis_kelamin = as.factor(jenis_kelamin),
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+pt_pend <- pt_pend %>% select(-c("nama_variabel")) %>% mutate(
+         tingkat_pendidikan = as.factor(tingkat_pendidikan),
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun))
+pt_bulan <- pt_bulan %>% filter_all(any_vars(. %in% c('Jumlah (Ribu orang)'))) %>% 
+  select(-c("nama_variabel", "satuan")) %>%  mutate(
+         persen  = as.numeric(persen),
+         tahun = as.factor(tahun),
+         bulan = as.factor(bulan))
+pt_lulus <- pt_lulus %>% select(-c("nama_variabel")) %>% mutate(
+         tingkat_pendidikan = as.factor(tingkat_pendidikan),
+         jumlah  = as.numeric(jumlah),
+         tahun = as.factor(tahun),
+         bulan = as.factor(bulan))
+
+```
+
+```{r}
+pt_bulan <- pt_bulan %>%
+  group_by(bulan) %>%
+  mutate(row = row_number()) %>%
+  tidyr::pivot_wider(names_from = bulan, values_from = persen) %>%
+  select(-row) %>% 
+  rowwise() %>% mutate(total = mean(c(Februari, Agustus), na.rm=T)) %>%
+  select(-c(Februari, Agustus))
+pt_bulan <- distinct(pt_bulan, tahun,total, .keep_all= TRUE)
+pt_bulan
+```
+
+
+```{r}
+b_provinsi <- b[b$provinsi != "INDONESIA", ]
+b_clean <- b_provinsi[b_provinsi$jenis_kelamin != "Laki-Laki", ]
+b_clean$persen<-format(round(b_clean$persen,2),nsmall=2)
+b_clean <- b_clean %>% mutate(persen = as.numeric(persen))
+b_clean <- b_clean %>% select(-c("nama_variabel", "jenis_kelamin")) %>% mutate(label=glue(" Provinsi: {provinsi}
+                                                                                          Total % : {persen}"))
+b_clean
+```
+
+```{r}
+b
+```
+
+
+```{r}
+plotbclean <- b_clean %>% ggplot(aes(x= tahun, y=reorder(persen, tahun), group=1)) +
+      geom_area(fill = "light blue", alpha=.3) +
+      geom_line(color= "blue") +
+      geom_point(aes(text = label)) +
+      scale_fill_viridis(discrete = TRUE, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position="none", axis.text.x = element_text(angle = 45, hjust=1))
+
+plotbclean
+```
+
+```{r}
+ptk_ptb <- bind_rows(pt_kelamin, pt_bulan)
+ptk_ptb <- pivot_wider(data = ptk_ptb, 
+                       names_from = jenis_kelamin, 
+                       values_from = c(persen, total))
+ptk_ptb <- ptk_ptb %>% rename(persen_l = `persen_Laki - Laki`) %>%
+  select(-c("total_Laki - Laki", "total_Perempuan", "persen_NA"))
+ptk_ptb$persen_l <- ptk_ptb$persen_l / 100
+ptk_ptb$persen_Perempuan <- ptk_ptb$persen_Perempuan / 100
+ptk_ptb$perempuan <- ptk_ptb$total_NA * ptk_ptb$persen_Perempuan
+ptk_ptb$perempuan <- format(round(ptk_ptb$perempuan,2),nsmall=2)
+ptk_ptb$total_keseluruhan <- format(round(ptk_ptb$total_NA,2),nsmall=2)
+ptk_ptb <- ptk_ptb %>% select(-c("persen_l", "persen_Perempuan", "total_NA"))
+ptk_ptb <- pivot_longer(data = ptk_ptb,
+                           cols = c("perempuan","total_keseluruhan"),
+                           names_to = "variabel")
+ptk_ptb$variabel <- as.factor(ptk_ptb$variabel)
+ptk_ptb
+```
+
+
+
+```{r}
+      plotptk_ptb <- ggplot(ptk_ptb, mapping = aes(x = tahun, y = reorder(value, tahun), group=variabel, color=variabel )) +
+        geom_line(stat = "identity", show.legend = F) +
+        geom_point() +
+        scale_fill_viridis(discrete = T, option = "C") +
+        labs(title = NULL,
+             x = NULL,
+             y = NULL,
+             fill = NULL) +
+        theme(legend.title = element_blank(),
+              axis.text.x = element_text(angle = 30, hjust = 1),
+              plot.title = element_text(face = "bold"),
+              panel.background = element_rect(fill = "#ffffff"),
+              axis.line.y = element_line(colour = "grey"),
+              axis.line.x = element_blank(),
+              panel.grid = element_blank()) +
+        theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+plotptk_ptb
+```
+
+```{r}
+levels(pt_pend$tingkat_pendidikan)
+pt_pend
+```
+
+
+```{r}
+plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+        geom_line(stat = "identity", show.legend = F) +
+        geom_point() +
+        scale_fill_viridis(discrete = T, option = "C") +
+        labs(title = NULL,
+             x = NULL,
+             y = NULL,
+             fill = NULL) +
+        theme(legend.title = element_blank(),
+              axis.text.x = element_text(angle = 30, hjust = 1),
+              plot.title = element_text(face = "bold"),
+              panel.background = element_rect(fill = "#ffffff"),
+              axis.line.y = element_line(colour = "grey"),
+              axis.line.x = element_blank(),
+              panel.grid = element_blank()) +
+        theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+plotptp
+```
+
+```{r}
+spp
+head(p)
+```
+
+```{r}
+p <- p[p$jenis_kelamin != "Laki-laki", ]
+p <- p %>% select(-c("jenis_kelamin"))
+p <- distinct(p, nama_variabel,tahun,total,provinsi, .keep_all= TRUE)
+p_provinsi <- p[p$provinsi != "INDONESIA", ]
+p_provinsi
+```
+
+```{r}
+plotp <- p_spp_prov[p_spp_prov$nama_variabel == "Pengeluaran per Kapita",] %>% ggplot(aes(x= tahun, y=reorder(total, tahun), group=1)) +
+      geom_col(fill = "blue", alpha=.3) +
+      geom_line(color= "blue") +
+      geom_point() +
+      scale_fill_viridis(discrete = TRUE, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position="none", axis.text.x = element_text(angle = 45, hjust=1))
+plotp
+```
+
+```{r}
+spp <- distinct(spp, tahun,persen,provinsi, .keep_all= TRUE)
+spp$persen<-format(round(spp$persen,2),nsmall=2)
+spp_provinsi <- spp[spp$provinsi != "INDONESIA", ]
+spp_provinsi
+```
+```{r}
+p_spp_prov$persen <- as.numeric(p_spp_prov$persen)
+p_spp_prov_a <- pivot_longer(data = p_spp_prov,
+                           cols = c("total", "persen"),
+                           names_to = "jumlah")
+p_spp_prov_a  <- p_spp_prov_a %>% na.omit()
+p_spp_prov_a <- p_spp_prov_a %>% select(-c(jumlah))
+p_spp_prov_a <- pivot_wider(data = p_spp_prov_a, 
+                       names_from = nama_variabel, 
+                       values_from = c(value))
+p_spp_prov_a <- distinct(p_spp_prov_a, tahun,`Pengeluaran per Kapita`,`Sumbangan Pendapatan Perempuan`,provinsi, .keep_all= TRUE)
+p_spp_prov_a <- p_spp_prov_a %>% rename( pengeluaran_per_kapita =`Pengeluaran per Kapita`, sumbangan_pendapatan = `Sumbangan Pendapatan Perempuan`)
+```
+
+```{r}
+pt_pend_2021 <- pt_pend %>% filter(tahun == "2021")
+pt_pend_2021 <- pt_pend_2021 %>% mutate(label = glue("Tingkat Pengangguran Terbuka dalam Persen : {persen}"))
+```
+
+
+```{r}
+plot2 <- ggplot(pt_pend_2021, mapping = aes(x = reorder(tingkat_pendidikan, persen), y = persen, fill = tingkat_pendidikan, group = 1, text = label)) +
+      geom_bar(stat = "identity", show.legend = F) +
+      scale_fill_viridis(discrete = T, option = "C") +
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust=1), )
+plot2
+```
+
+
+```{r}
+scat_plot <- ggplot(p_spp_prov_a, aes(x = pengeluaran_per_kapita , y = sumbangan_pendapatan)) +
+        geom_point(aes(color = tahun)) +
+        scale_y_continuous(limits = c(0,18)) +
+        scale_color_manual(values = c("#DF0101", "#04B486")) +
+        labs(title = "HDI on Ecological Footprint",
+             y = "Ecological Footprint",
+             x = "Human Development Index") +
+        theme(plot.title = element_text(face = "bold", size = 14, hjust = 0),
+              panel.background = element_rect(fill = "#ffffff"), 
+              panel.grid.major.x = element_line(colour = "grey"),
+              panel.grid.major.y = element_line(colour = "grey"),
+              axis.line.x = element_line(color = "grey"),
+              axis.line.y = element_line(color = "grey"),
+              axis.text = element_text(size = 10, colour = "black"),
+              legend.title = element_blank())
+scat_plot
+```
+
+
+```{r}
+plot1 <- ggplot(p_spp_prov, fill = nama_variabel) + 
+  geom_point(aes(x = tahun, y = angka, fill = factor(nama_variabel, levels=c("Rata-rata Lama Sekolah","Angka Harapan Lama Sekolah")),text = label),
+           stat = "identity", position = "dodge", show.legend = F) +
+  scale_fill_viridis(discrete = T, option = "C") +
+  scale_y_continuous("Count", breaks = seq(5,35,5), limits=c(0,20),
+                     expand = expansion(mult = c(0.001, 0.001)),
+                     sec.axis = dup_axis(name = NULL, labels = NULL)) +
+  scale_x_discrete(expand = expansion(mult = c(0.0001, 0.0001)))+
+  labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+  theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position = "none")
+plot1
+```
+
+```{r}
+p_spp <- bind_rows(p, spp)
+p_spp_prov <- p_spp[p_spp$provinsi != "INDONESIA", ]
+p_spp_prov[p_spp_prov$nama_variabel == "Pengeluaran per Kapita",]
+p_spp_prov
+```
+
+
+```{r}
+top5hlsrls <- pivot_wider(data = hls_rls_clean, 
+                       names_from = nama_variabel, 
+                       values_from = c(angka))
+top5hlsrls <- top5hlsrls %>% rename(rata = `Rata-rata Lama Sekolah`, harapan = `Angka Harapan Lama Sekolah`)
+top5hlsrls %>% arrange(-harapan, rata)
+```
+```{r}
+hlsarr <- hls_clean %>% arrange(-angka) %>% filter(tahun == "2021") %>% rename(harapan = angka) %>% select(-c(nama_variabel, jenis_kelamin, tahun))
+rlsarr <- rls_clean %>% arrange(-angka) %>% filter(tahun == "2021") %>% rename(realitas = angka)%>% select(-c(nama_variabel, jenis_kelamin, tahun))
+hlsrlsarr <- bind_rows(hlsarr, rlsarr)
+hlsrlsarr <- pivot_longer(data = hlsrlsarr,
+                           cols = c("harapan","realitas"),
+                           names_to = "variabel")
+hlsrlsarr <- hlsrlsarr %>% na.omit()
+hlsrlsarr$variabel <- as.factor(hlsrlsarr$variabel)
+hlsrlsarr <- hlsrlsarr %>% mutate(label = glue("Provinsi : {provinsi}
+                                      Variabel : {variabel}
+                                      Angka (Tahun) : Value"))
+rlsarr
+```
+
+```{r}
+    
+    plotprovinsi <- p_spp_prov %>% ggplot(mapping = aes(x= tahun, y=reorder(total, tahun), group=1)) +
+      geom_col(fill = "blue", alpha=.3) +
+      geom_line(color= "blue") +
+      geom_point() +
+      scale_fill_viridis(discrete = TRUE, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position="none", axis.text.x = element_text(angle = 45, hjust=1))
+plotprovinsi
+```
+
+
+
+```{r}
+    plothr <- hlsrlsarr %>% ggplot(mapping = aes(x= reorder(provinsi,value), y=value, fill = variabel, group= variabel, name = variabel)) +
+      geom_area(position = "identity", colour="black", size=0.2, alpha=.4) +
+      geom_point(aes(text = label)) +
+      scale_fill_viridis(discrete = TRUE, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position="none", axis.text.x = element_text(angle = 45, hjust=1))
+plothr
+```
+```{r}
+hlsrlsarr %>%
+  ggplot(aes(x=provinsi, y= value, fill=variabel)) +
+    geom_area(position = "identity", colour="black", size=0.2, alpha=.4) +
+    geom_point(aes(text=label)) +
+    scale_fill_viridis(discrete = TRUE, option = "C") +
+    ggtitle("Korban menurut Jenis Kelamin Per Bulan") +
+    theme_minimal() +
+    theme(legend.position="top")
+```
+
+```{r}
+head(hlsrlsarr[hlsrlsarr$variabel == "harapan", ],1)
+hlsrlsarr %>% filter(variabel == 'realitas') %>%
+           filter(value == max(value, na.rm = TRUE)) %>% select(value)
+```
+
+
+## Including Plots
+
+checkboxGroupInput (
+                                inputId = "input_ptp",
+                                label = "Pilih Variabel",
+                                choices = c("Tidak/Belum Pernah Sekolah/Belum Tamat & Tamat SD" = "Tidak/Belum Pernah Sekolah/Belum Tamat & Tamat SD", 
+                                            "SMP"="SMP", 
+                                            "SMA umum"= "SMA umum", 
+                                            "SMA Kejuruan"="SMA Kejuruan", 
+                                            "	Diploma I/II/III"="	Diploma I/II/III", 
+                                            "Universitas" = "Universitas"),
+                                selected = "Tidak/belum pernah sekolah")
+
+
+You can also embed plots, for example:
+
+    if(identical(input$input_ptp, "Tidak/Belum Pernah Sekolah/Belum Tamat & Tamat SD")) {
+    pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "Tidak/Belum Pernah Sekolah/Belum Tamat & Tamat SD") %>% mutate(label = glue(" Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                                Total % : {persen}"))
+
+    plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+      geom_line(stat = "identity", show.legend = F) +
+      geom_point(aes(text = label)) +
+      scale_fill_viridis(discrete = T, option = "C") +
+      labs(title = NULL,
+           x = NULL,
+           y = NULL,
+           fill = NULL) +
+      theme(legend.title = element_blank(),
+            axis.text.x = element_text(angle = 30, hjust = 1),
+            plot.title = element_text(face = "bold"),
+            panel.background = element_rect(fill = "#ffffff"),
+            axis.line.y = element_line(colour = "grey"),
+            axis.line.x = element_blank(),
+            panel.grid = element_blank()) +
+      theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+        } else { 
+          if(identical(input$input_ptp, "SMP")) {
+            pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "SMP") %>% mutate(label = glue(" Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                  Total % : {persen}"))
+            
+            plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+              geom_line(stat = "identity", show.legend = F) +
+              geom_point(aes(text = label)) +
+              scale_fill_viridis(discrete = T, option = "C") +
+              labs(title = NULL,
+                   x = NULL,
+                   y = NULL,
+                   fill = NULL) +
+              theme(legend.title = element_blank(),
+                    axis.text.x = element_text(angle = 30, hjust = 1),
+                    plot.title = element_text(face = "bold"),
+                    panel.background = element_rect(fill = "#ffffff"),
+                    axis.line.y = element_line(colour = "grey"),
+                    axis.line.x = element_blank(),
+                    panel.grid = element_blank()) +
+              theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+          } else { 
+            if(identical(input$input_ptp, "SMA umum")) {
+              pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "SMA umum") %>% mutate(label = glue("Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                            Total % : {persen}"))
+              
+              plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+                geom_line(stat = "identity", show.legend = F) +
+                geom_point(aes(text = label)) +
+                scale_fill_viridis(discrete = T, option = "C") +
+                labs(title = NULL,
+                     x = NULL,
+                     y = NULL,
+                     fill = NULL) +
+                theme(legend.title = element_blank(),
+                      axis.text.x = element_text(angle = 30, hjust = 1),
+                      plot.title = element_text(face = "bold"),
+                      panel.background = element_rect(fill = "#ffffff"),
+                      axis.line.y = element_line(colour = "grey"),
+                      axis.line.x = element_blank(),
+                      panel.grid = element_blank()) +
+                theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+            } else { 
+              if(identical(input$input_ptp, "SMA Kejuruan")) {
+                pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "SMA Kejuruan") %>% mutate(label = glue("Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                                  Total % : {persen}"))
+                
+                plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+                  geom_line(stat = "identity", show.legend = F) +
+                  geom_point(aes(text = label)) +
+                  scale_fill_viridis(discrete = T, option = "C") +
+                  labs(title = NULL,
+                       x = NULL,
+                       y = NULL,
+                       fill = NULL) +
+                  theme(legend.title = element_blank(),
+                        axis.text.x = element_text(angle = 30, hjust = 1),
+                        plot.title = element_text(face = "bold"),
+                        panel.background = element_rect(fill = "#ffffff"),
+                        axis.line.y = element_line(colour = "grey"),
+                        axis.line.x = element_blank(),
+                        panel.grid = element_blank()) +
+                  theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+                } else { 
+                  if(identical(input$input_ptp, "	Diploma I/II/III")) {
+                    pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "	Diploma I/II/III") %>% mutate(label = glue("Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                                    Total % : {persen}"))
+                    
+                    plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+                      geom_line(stat = "identity", show.legend = F) +
+                      geom_point(aes(text = label)) +
+                      scale_fill_viridis(discrete = T, option = "C") +
+                      labs(title = NULL,
+                           x = NULL,
+                           y = NULL,
+                           fill = NULL) +
+                      theme(legend.title = element_blank(),
+                            axis.text.x = element_text(angle = 30, hjust = 1),
+                            plot.title = element_text(face = "bold"),
+                            panel.background = element_rect(fill = "#ffffff"),
+                            axis.line.y = element_line(colour = "grey"),
+                            axis.line.x = element_blank(),
+                            panel.grid = element_blank()) +
+                      theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+                } else { 
+                  if(identical(input$input_ptp, "Universitas")) {
+                    pt_pend <- pt_pend %>% filter(tingkat_pendidikan == "Universitas") %>% mutate(label = glue("Tingkat Pendidikan : {tingkat_pendidikan}
+                                                                                                                Total % : {persen}"))
+                    
+                    plotptp <- ggplot(pt_pend, mapping = aes(x = tahun, y = reorder(persen, tahun), group=tingkat_pendidikan, color=tingkat_pendidikan )) +
+                      geom_line(stat = "identity", show.legend = F) +
+                      geom_point(aes(text = label)) +
+                      scale_fill_viridis(discrete = T, option = "C") +
+                      labs(title = NULL,
+                           x = NULL,
+                           y = NULL,
+                           fill = NULL) +
+                      theme(legend.title = element_blank(),
+                            axis.text.x = element_text(angle = 30, hjust = 1),
+                            plot.title = element_text(face = "bold"),
+                            panel.background = element_rect(fill = "#ffffff"),
+                            axis.line.y = element_line(colour = "grey"),
+                            axis.line.x = element_blank(),
+                            panel.grid = element_blank()) +
+                      theme(legend.position = "none", axis.text.x = element_text(angle = 0, hjust=1), )
+                  }}}}}}
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
